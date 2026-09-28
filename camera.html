@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Camera App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 640px;
+            max-width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            background: #000;
+        }
+
+        video, canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* กรอบแนะนำหน้าตรง */
+        .face-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 250px;
+            height: 320px;
+            border: 3px dashed rgba(255, 255, 255, 0.6);
+            border-radius: 50% / 40%;
+            pointer-events: none;
+        }
+
+        /* แถบแจ้งเตือนสถานะ */
+        .status-banner {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+
+        button.secondary {
+            background-color: #f44336;
+        }
+        button.secondary:hover {
+            background-color: #d32f2f;
+        }
+
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80px;
+            font-weight: bold;
+            color: #FFEB3B;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>ระบบถ่ายภาพอัจฉริยะ</h2>
+    
+    <div class="camera-container">
+        <!-- วิดีโอจากกล้อง -->
+        <video id="video" autoplay playsinline></video>
+        <!-- แคนวาสสำหรับซ่อนไว้แคปรูป -->
+        <canvas id="canvas" style="display: none;"></canvas>
+        
+        <!-- ตัวช่วยแนะนำผู้ใช้ -->
+        <div class="face-guide"></div>
+        <div id="status" class="status-banner">กำลังตรวจสอบสภาพแสงและใบหน้า...</div>
+        <div id="countdown">3</div>
+    </div>
+
+    <div class="controls">
+        <button id="snapBtn" onclick="startCountdown()">📸 ถ่ายภาพ</button>
+        <button id="retryBtn" class="secondary" style="display:none;" onclick="resetCamera()">🔄 ถ่ายใหม่</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const statusEl = document.getElementById('status');
+        const countdownEl = document.getElementById('countdown');
+        const snapBtn = document.getElementById('snapBtn');
+        const retryBtn = document.getElementById('retryBtn');
+
+        let streamInstance = null;
+
+        // เปิดใช้งานกล้อง
+        async function initCamera() {
+            try {
+                streamInstance = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480, facingMode: "user" }, 
+                    audio: false 
+                });
+                video.srcObject = streamInstance;
+                checkLightingAndPosition();
+            } catch (err) {
+                console.error("ไม่สามารถเปิดกล้องได้: ", err);
+                statusEl.innerText = "❌ กรุณาอนุญาตให้เข้าถึงกล้องเว็บแคม";
+                snapBtn.style.display = 'none';
+            }
+        }
+
+        // จำลองระบบตรวจเช็คแสง (ใช้การคำนวณ Pixel คร่าวๆ หรือแนะนำผู้ใช้เบื้องต้น)
+        function checkLightingAndPosition() {
+            // ในที่นี้จำลองข้อความแนะนำ เพื่อให้ผู้ใช้จัดตำแหน่ง
+            setTimeout(() => {
+                statusEl.innerText = "✨ จัดหน้าให้อยู่ในกรอบ และมองตรงไปที่กล้อง";
+            }, 1500);
+        }
+
+        // ฟังก์ชันนับถอยหลังก่อนถ่าย
+        function startCountdown() {
+            snapBtn.style.display = 'none';
+            let count = 3;
+            countdownEl.style.display = 'block';
+            countdownEl.innerText = count;
+
+            let timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownEl.innerText = count;
+                } else {
+                    clearInterval(timer);
+                    countdownEl.style.display = 'none';
+                    takeSnapshot();
+                }
+            }, 1000);
+        }
+
+        // ถ่ายภาพ
+        function takeSnapshot() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            
+            // วาดภาพจาก Video ลงบน Canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // ซ่อน Video แสดง Canvas (ภาพนิ่ง)
+            video.style.display = 'none';
+            canvas.style.display = 'block';
+            
+            statusEl.innerText = "✅ ถ่ายภาพสำเร็จ!";
+            retryBtn.style.display = 'inline-block';
+
+            // ตัวอย่าง: แปลงเป็น Data URL เพื่อนำไปใช้งานต่อ (เช่น อัปโหลดหรือดาวน์โหลด)
+            const imageDataURL = canvas.toDataURL('image/png');
+            console.log("Image Data URL:", imageDataURL);
+        }
+
+        // รีเซ็ตกลับไปหน้ากล้องสด
+        function resetCamera() {
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            retryBtn.style.display = 'none';
+            snapBtn.style.display = 'inline-block';
+            statusEl.innerText = "✨ จัดหน้าให้อยู่ในกรอบ และมองตรงไปที่กล้อง";
+        }
+
+        // เริ่มต้นทำงานเมื่อโหลดเสร็จ
+        initCamera();
+    </script>
+</body>
+</html>
